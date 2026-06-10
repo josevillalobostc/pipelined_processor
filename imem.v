@@ -5,7 +5,7 @@ module imem(input  [31:0] a,
 
   initial begin
       $readmemh("riscvtest.mem",RAM); 
-  end1
+  end
 
   assign rd = RAM[a[31:2]]; // word aligned
 endmodule
