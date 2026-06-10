@@ -8,10 +8,10 @@ module riscvsingle(input  clk, reset,
   
   wire [31:0] ALUResult; 
   
-  wire       ALUSrc, RegWrite, Jump, Zero; 
+  wire       ALUSrc, RegWrite, Jump, Zero, Negative, Overflow; 
   wire [1:0] ResultSrc;
   wire [2:0] ImmSrc; 
-  wire [2:0] ALUControl; 
+  wire [3:0] ALUControl; 
   wire       PCSrc; 
 
   // DataAdr is connected to ALUResult
@@ -22,6 +22,8 @@ module riscvsingle(input  clk, reset,
     .funct3(Instr[14:12]), 
     .funct7b5(Instr[30]), 
     .Zero(Zero),
+    .Negative(Negative),
+    .Overflow(Overflow),
     .ResultSrc(ResultSrc), 
     .MemWrite(MemWrite), 
     .PCSrc(PCSrc),
@@ -42,6 +44,8 @@ module riscvsingle(input  clk, reset,
     .ImmSrc(ImmSrc), 
     .ALUControl(ALUControl),
     .Zero(Zero), 
+    .Negative(Negative),
+    .Overflow(Overflow),
     .PC(PC), 
     .Instr(Instr),
     .ALUResult(ALUResult), 

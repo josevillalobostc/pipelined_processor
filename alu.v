@@ -17,15 +17,15 @@ module alu(input  [31:0] a, b,
                     ~alucontrol[1] & alucontrol[0]; 
 
   always @* case (alucontrol)
-      3'b0000:  result_reg = sum; // add
-      3'b0001:  result_reg = sum; // subtract
-      3'b0010:  result_reg = a & b; // and
-      3'b0011:  result_reg = a | b; // or
-      3'b0100:  result_reg = a ^ b; // xor
-      3'b0101:  result_reg = sum[31] ^ v; // slt
-      3'b0110:  result_reg = a << b[4:0]; // sll
-      3'b0111:  result_reg = a >> b[4:0]; // srl
-      3'b1000:  result_reg = $signed(a) >>> b[4:0]; // sra
+      4'b0000:  result_reg = sum; // add
+      4'b0001:  result_reg = sum; // subtract
+      4'b0010:  result_reg = a & b; // and
+      4'b0011:  result_reg = a | b; // or
+      4'b0100:  result_reg = a ^ b; // xor
+      4'b0101:  result_reg = sum[31] ^ v; // slt
+      4'b0110:  result_reg = a << b[4:0]; // sll
+      4'b0111:  result_reg = a >> b[4:0]; // srl
+      4'b1000:  result_reg = $signed(a) >>> b[4:0]; // sra
       default: result_reg = 32'bx;
     endcase
 

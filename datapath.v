@@ -3,8 +3,10 @@ module datapath(input  clk, reset,
                 input  PCSrc, ALUSrc,
                 input  RegWrite,
                 input  [2:0]  ImmSrc, 
-                input  [2:0]  ALUControl,
+                input  [3:0]  ALUControl,
                 output Zero,
+                output Negative,
+                output Overflow,
                 output [31:0] PC,
                 input  [31:0] Instr,
                 output [31:0] ALUResult, WriteData, 
@@ -75,7 +77,9 @@ module datapath(input  clk, reset,
     .b(SrcB), 
     .alucontrol(ALUControl), 
     .result(ALUResult), 
-    .zero(Zero)
+    .zero(Zero),
+    .neg(Negative),
+    .v(Overflow)
   ); 
 
   mux4 #(WIDTH)  resultmux(
