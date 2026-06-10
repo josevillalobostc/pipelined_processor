@@ -8,7 +8,7 @@ module riscvsingle(input  clk, reset,
   
   wire [31:0] ALUResult; 
   
-  wire       ALUSrc, RegWrite, Jump, Zero, Negative, Overflow; 
+  wire       ALUSrc, PCTargetSource, RegWrite, Jump, Zero, Negative, Overflow; 
   wire [1:0] ResultSrc;
   wire [2:0] ImmSrc; 
   wire [3:0] ALUControl; 
@@ -27,6 +27,7 @@ module riscvsingle(input  clk, reset,
     .ResultSrc(ResultSrc), 
     .MemWrite(MemWrite), 
     .PCSrc(PCSrc),
+    .PCTargetSource(PCTargetSource),
     .ALUSrc(ALUSrc), 
     .RegWrite(RegWrite), 
     .Jump(Jump),
@@ -40,6 +41,7 @@ module riscvsingle(input  clk, reset,
     .ResultSrc(ResultSrc), 
     .PCSrc(PCSrc),
     .ALUSrc(ALUSrc), 
+    .PCTargetSource(PCTargetSource),
     .RegWrite(RegWrite),
     .ImmSrc(ImmSrc), 
     .ALUControl(ALUControl),

@@ -1,6 +1,6 @@
 module datapath(input  clk, reset,
                 input  [1:0]  ResultSrc, 
-                input  PCSrc, ALUSrc,
+                input  PCSrc, ALUSrc, PCTargetSource,
                 input  RegWrite,
                 input  [2:0]  ImmSrc, 
                 input  [3:0]  ALUControl,
@@ -16,7 +16,7 @@ module datapath(input  clk, reset,
 
   wire [31:0] PCNext, PCPlus4, PCTarget; 
   wire [31:0] ImmExt; 
-  wire [31:0] SrcA, SrcB; 
+  wire [31:0] SrcA, SrcB, SrcPC; 
   wire [31:0] Result; 
 
   // next PC logic
@@ -33,15 +33,23 @@ module datapath(input  clk, reset,
     .y(PCPlus4)
   ); 
 
+
+  mux2        pcaddsource(
+    .d1(PC),
+    .d2(SrcA),
+    .s(PCTargetSource),
+    .y(SrcPC)
+  )
+
   adder       pcaddbranch(
-    .a(PC), 
+    .a(SrcPC), 
     .b(ImmExt), 
     .y(PCTarget)
   ); 
 
   mux2 #(WIDTH)  pcmux(
     .d0(PCPlus4), 
-    .d1(PCTarget), 
+    .d1({PCTarget[31:1],1'b0}), 
     .s(PCSrc), 
     .y(PCNext)
   ); 

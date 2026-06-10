@@ -7,7 +7,7 @@ module controller(input  [6:0] op,
                   output [1:0] ResultSrc, 
                   output MemWrite,
                   output PCSrc, ALUSrc,
-                  output RegWrite, Jump,
+                  output RegWrite, Jump, PCTargetSource,
                   output [2:0] ImmSrc, 
                   output [3:0] ALUControl);
   
@@ -22,6 +22,7 @@ module controller(input  [6:0] op,
     .ALUSrc(ALUSrc), 
     .RegWrite(RegWrite), 
     .Jump(Jump), 
+    .PCTargetSource(PCTargetSource),
     .ImmSrc(ImmSrc), 
     .ALUOp(ALUOp)
   ); 
