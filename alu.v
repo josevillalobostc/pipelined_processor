@@ -1,10 +1,11 @@
 module alu(input  [31:0] a, b,
            input  [2:0]  alucontrol,
            output [31:0] result,
-           output zero);
+           output zero,
+           output neg,
+           output v);
   
   wire [31:0] condinvb, sum; 
-  wire        v; // overflow
   wire        isAddSub; 
 
   reg [31:0] result_reg; 
@@ -28,6 +29,7 @@ module alu(input  [31:0] a, b,
     endcase
 
   assign zero = (result == 32'b0); 
+  assign neg = result[31];
   assign v = ~(alucontrol[0] ^ a[31] ^ b[31]) & (a[31] ^ sum[31]) & isAddSub; 
   
 endmodule

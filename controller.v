@@ -2,6 +2,8 @@ module controller(input  [6:0] op,
                   input  [2:0] funct3,
                   input        funct7b5,
                   input        Zero,
+                  input        Negative,
+                  input        Overflow,
                   output [1:0] ResultSrc, 
                   output MemWrite,
                   output PCSrc, ALUSrc,
@@ -31,6 +33,12 @@ module controller(input  [6:0] op,
     .ALUOp(ALUOp), 
     .ALUControl(ALUControl)
   ); 
-
-  assign PCSrc = Branch & Zero | Jump; 
+  reg ValidBranch;
+  always @* case(funct3)
+    3'b000 : ValidBranch = Branch & Zero;
+    3'b001 : ValidBranch = Branch & ~Zero;
+    3'b100 : ValidBranch = Branch & (Negative ^ Overflow);
+    3'b101 : ValidBranch = Branch & (~Negative ^ Overflow);
+  endcase
+  assign PCSrc = ValidBranch | Jump; 
 endmodule
