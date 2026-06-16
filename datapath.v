@@ -1,13 +1,19 @@
 module datapath(input         clk, reset,
-                // -- Señales de control etapa D (vienen del Control Unit) --
-                input  [1:0]  ResultSrcD,
-                input         ALUSrcD,
-                input         PCTargetSrcD,
-                input         RegWriteD,
-                input         BranchD,          // antes salía del controller como señal interna
-                input         JumpD,
+
+                // -- Etapa D: solo ImmSrc (Extend vive en Decode) --
                 input  [2:0]  ImmSrcD,
-                input  [3:0]  ALUControlD,
+
+                // -- Etapa E: señales de control para la ALU y salto --
+                input         ALUSrcE,
+                input         PCTargetSrcE,
+                input         BranchE,
+                input         JumpE,
+                input  [3:0]  ALUControlE,
+
+                // -- Etapa W: señales de control para el Register File y result mux --
+                input         RegWriteW,
+                input  [1:0]  ResultSrcW,
+
                 // -- Interfaz con memorias --
                 output [31:0] PC,
                 input  [31:0] Instr,
@@ -21,26 +27,29 @@ module datapath(input         clk, reset,
   wire [31:0] SrcA, SrcB, SrcPC;
   wire [31:0] Result;
 
-  // -- Flags de la ALU (ya no salen al controller) --
+  // -- Flags de la ALU (internas, ya no van al controller) --
   wire Zero, Negative, Overflow;
 
   // ----------------------------------------------------------------
-  // Lógica de PCSrc — movida aquí desde el controller (etapa E)
-  // Usa BranchD/JumpD del control y las flags de la ALU para decidir
-  // si se toma el salto. Opción B: lógica extendida bne/blt/bge.
+  // PCSrc — lógica de salto en etapa E
+  // Usa BranchE/JumpE del controller y las flags de la ALU.
+  // Opción B: lógica extendida beq/bne/blt/bge.
+  // NOTA: funct3 se toma de Instr[14:12] (instrucción en D stage).
+  // Cuando se agreguen los registros de datos del pipeline, se debe
+  // reemplazar por InstrE[14:12] del registro ID/EX de datos.
   // ----------------------------------------------------------------
   reg  ValidBranch;
   wire PCSrc;
 
-  always @* case(Instr[14:12])   // funct3 selecciona el tipo de branch
-    3'b000 : ValidBranch = BranchD &  Zero;                    // beq
-    3'b001 : ValidBranch = BranchD & ~Zero;                    // bne
-    3'b100 : ValidBranch = BranchD &  (Negative ^ Overflow);   // blt  (signed)
-    3'b101 : ValidBranch = BranchD & ~(Negative ^ Overflow);   // bge  (signed)
+  always @* case(Instr[14:12])
+    3'b000 : ValidBranch = BranchE &  Zero;                    // beq
+    3'b001 : ValidBranch = BranchE & ~Zero;                    // bne
+    3'b100 : ValidBranch = BranchE &  (Negative ^ Overflow);   // blt (signed)
+    3'b101 : ValidBranch = BranchE & ~(Negative ^ Overflow);   // bge (signed)
     default: ValidBranch = 1'b0;
   endcase
 
-  assign PCSrc = ValidBranch | JumpD;
+  assign PCSrc = ValidBranch | JumpE;
 
   // ----------------------------------------------------------------
   // Lógica de próximo PC
@@ -58,13 +67,13 @@ module datapath(input         clk, reset,
     .y(PCPlus4)
   );
 
-  // Mux: base del cálculo de PCTarget
-  //   PCTargetSrcD=0 → PC+ImmExt  (jal, branch)
-  //   PCTargetSrcD=1 → SrcA+ImmExt (jalr)
+  // Mux base de PCTarget:
+  //   PCTargetSrcE=0 → PC + ImmExt  (jal, branches)
+  //   PCTargetSrcE=1 → SrcA + ImmExt (jalr)
   mux2 pcaddsource(
     .d0(PC),
     .d1(SrcA),
-    .s (PCTargetSrcD),
+    .s (PCTargetSrcE),
     .y (SrcPC)
   );
 
@@ -74,7 +83,7 @@ module datapath(input         clk, reset,
     .y(PCTarget)
   );
 
-  // Bit 0 forzado a 0 para alinear a instrucción (jalr spec)
+  // Bit 0 forzado a 0 (jalr spec)
   mux2 #(WIDTH) pcmux(
     .d0(PCPlus4),
     .d1({PCTarget[31:1], 1'b0}),
@@ -83,11 +92,11 @@ module datapath(input         clk, reset,
   );
 
   // ----------------------------------------------------------------
-  // Register File
+  // Register File — escribe en etapa W con RegWriteW
   // ----------------------------------------------------------------
   regfile rf(
     .clk(clk),
-    .we3(RegWriteD),
+    .we3(RegWriteW),
     .a1 (Instr[19:15]),
     .a2 (Instr[24:20]),
     .a3 (Instr[11:7]),
@@ -96,6 +105,7 @@ module datapath(input         clk, reset,
     .rd2(WriteData)
   );
 
+  // Extend vive en etapa D → usa ImmSrcD
   extend ext(
     .instr  (Instr[31:7]),
     .immsrc (ImmSrcD),
@@ -103,34 +113,34 @@ module datapath(input         clk, reset,
   );
 
   // ----------------------------------------------------------------
-  // ALU
+  // ALU — opera en etapa E con ALUSrcE / ALUControlE
   // ----------------------------------------------------------------
   mux2 #(WIDTH) srcbmux(
     .d0(WriteData),
     .d1(ImmExt),
-    .s (ALUSrcD),
+    .s (ALUSrcE),
     .y (SrcB)
   );
 
   alu alu(
     .a         (SrcA),
     .b         (SrcB),
-    .alucontrol(ALUControlD),
+    .alucontrol(ALUControlE),
     .result    (ALUResult),
-    .zero      (Zero),       // se usa internamente para ValidBranch
-    .neg       (Negative),   // idem
-    .v         (Overflow)    // idem
+    .zero      (Zero),
+    .neg       (Negative),
+    .v         (Overflow)
   );
 
   // ----------------------------------------------------------------
-  // Result mux (selecciona qué se escribe en el Register File)
+  // Result mux — selecciona en etapa W con ResultSrcW
   // ----------------------------------------------------------------
   mux4 #(WIDTH) resultmux(
     .d0(ALUResult),
     .d1(ReadData),
     .d2(PCPlus4),
     .d3(ImmExt),
-    .s (ResultSrcD),
+    .s (ResultSrcW),
     .y (Result)
   );
 
