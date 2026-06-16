@@ -1,4 +1,4 @@
-module enable_flipflop (input  clk, reset, enable, clear
+module enable_flipflop (input  clk, reset, enable, clear,
                input  [WIDTH-1:0] d, 
                output [WIDTH-1:0] q);
 
