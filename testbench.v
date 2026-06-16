@@ -28,6 +28,12 @@ module testbench;
     # 5; clk = 0; # 5;
   end
 
+  initial begin
+    #100; // Espera 100 ns
+    $display("Simulation reached 150 ns limit. Finishing...");
+    $finish; // Termina por completo la simulación
+  end
+
   // check results
   always @(negedge clk) begin
     if(MemWrite) begin

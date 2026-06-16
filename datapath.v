@@ -35,11 +35,11 @@ module datapath(input  clk, reset,
 
 
   mux2        pcaddsource(
-    .d1(PC),
-    .d2(SrcA),
+    .d0(PC),
+    .d1(SrcA),
     .s(PCTargetSource),
     .y(SrcPC)
-  )
+  );
 
   adder       pcaddbranch(
     .a(SrcPC), 
