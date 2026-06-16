@@ -30,8 +30,8 @@ module testbench;
 
   initial begin
     #100; // Espera 100 ns
-    $display("Simulation reached 150 ns limit. Finishing...");
-    $finish; // Termina por completo la simulación
+    $display("Finishing...");
+    $finish;
   end
 
   // check results
