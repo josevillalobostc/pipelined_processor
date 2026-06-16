@@ -1,45 +1,40 @@
 module controller(input  [6:0] op,
                   input  [2:0] funct3,
                   input        funct7b5,
-                  input        Zero,
-                  input        Negative,
-                  input        Overflow,
-                  output [1:0] ResultSrc, 
-                  output MemWrite,
-                  output PCSrc, ALUSrc,
-                  output RegWrite, Jump, PCTargetSource,
-                  output [2:0] ImmSrc, 
-                  output [3:0] ALUControl);
-  
-  wire [1:0] ALUOp; 
-  wire       Branch; 
-  
-  maindec md(
-    .op(op), 
-    .ResultSrc(ResultSrc), 
-    .MemWrite(MemWrite), 
-    .Branch(Branch),
-    .ALUSrc(ALUSrc), 
-    .RegWrite(RegWrite), 
-    .Jump(Jump), 
-    .PCTargetSource(PCTargetSource),
-    .ImmSrc(ImmSrc), 
-    .ALUOp(ALUOp)
-  ); 
+                  // -- Señales de salida etapa D (Decode) --
+                  output [1:0] ResultSrcD,
+                  output       MemWriteD,
+                  output       ALUSrcD,
+                  output       RegWriteD, JumpD, BranchD,
+                  output       PCTargetSrcD,
+                  output [2:0] ImmSrcD,
+                  output [3:0] ALUControlD);
 
-  aludec  ad(
-    .opb5(op[5]), 
-    .funct3(funct3), 
-    .funct7b5(funct7b5), 
-    .ALUOp(ALUOp), 
-    .ALUControl(ALUControl)
-  ); 
-  reg ValidBranch;
-  always @* case(funct3)
-    3'b000 : ValidBranch = Branch & Zero;
-    3'b001 : ValidBranch = Branch & ~Zero;
-    3'b100 : ValidBranch = Branch & (Negative ^ Overflow);
-    3'b101 : ValidBranch = Branch & (~Negative ^ Overflow);
-  endcase
-  assign PCSrc = ValidBranch | Jump; 
+  // PCSrc ya NO se genera aquí. Se calcula en el datapath (etapa E)
+  // usando BranchD, JumpD y las flags de la ALU (Zero, Negative, Overflow).
+  // Zero/Negative/Overflow ya no son entradas del controller.
+
+  wire [1:0] ALUOp;
+
+  maindec md(
+    .op          (op),
+    .ResultSrcD  (ResultSrcD),
+    .MemWriteD   (MemWriteD),
+    .BranchD     (BranchD),
+    .ALUSrcD     (ALUSrcD),
+    .RegWriteD   (RegWriteD),
+    .JumpD       (JumpD),
+    .PCTargetSrcD(PCTargetSrcD),
+    .ImmSrcD     (ImmSrcD),
+    .ALUOp       (ALUOp)
+  );
+
+  aludec ad(
+    .opb5       (op[5]),
+    .funct3     (funct3),
+    .funct7b5   (funct7b5),
+    .ALUOp      (ALUOp),
+    .ALUControlD(ALUControlD)
+  );
+
 endmodule
