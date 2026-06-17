@@ -1,4 +1,4 @@
-// Resettable flip-flop (asynchronous reset)
+// flip-flop reiniciable (reset asíncrono)
 module flopr #(parameter WIDTH = 8)
               (input              clk, reset,
                input  [WIDTH-1:0] d,

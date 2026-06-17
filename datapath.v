@@ -1,41 +1,41 @@
 module datapath(input         clk, reset,
 
-                // D-stage
+                // etapa d
                 input  [2:0]  ImmSrcD,
 
-                // E-stage control signals
+                // señales de control de la etapa e
                 input         ALUSrcE, PCTargetSrcE, BranchE, JumpE,
                 input  [3:0]  ALUControlE,
 
-                // M/W-stage control signals
+                // señales de control de la etapa m/w
                 input  [1:0]  ResultSrcM,
                 input         RegWriteW,
                 input  [1:0]  ResultSrcW,
 
-                // Hazard Unit control signals
+                // señales de control de la unidad de hazard
                 input         StallF, StallD, FlushD, FlushE,
                 input  [1:0]  ForwardAE, ForwardBE,
 
-                // Controller inputs (decoded from instruction in D stage)
+                // entradas del controlador (decodificadas de la instrucción en la etapa d)
                 output [6:0]  OpD,
                 output [2:0]  Funct3D,
                 output        Funct7b5D,
 
-                // Hazard Unit state signals
+                // señales de estado de la unidad de hazard
                 output [4:0]  Rs1D, Rs2D,
                 output [4:0]  Rs1E, Rs2E, RdE,
                 output [4:0]  RdM, RdW,
                 output        PCSrcE,
 
-                // Memory interface
+                // interfaz de memoria
                 output [31:0] PC,
-                input  [31:0] Instr,        // F-stage instruction
+                input  [31:0] Instr,        // instrucción de la etapa f
                 output [31:0] ALUResultM, WriteDataM,
                 input  [31:0] ReadDataM);
 
   localparam WIDTH = 32;
 
-  // Internal wires
+  // cables internos
   wire [31:0] PCNext, PCPlus4F;
   wire [31:0] InstrD, PCD, PCPlus4D;
   wire [31:0] ImmExt;
@@ -58,9 +58,9 @@ module datapath(input         clk, reset,
 
   wire        ZeroE, NegativeE, OverflowE;
 
-  // ─── FETCH STAGE ──────────────────────────────────────────────────────────
+  // etapa fetch
 
-  // PC register with stall enable and no clear
+  // registro pc con habilitación de parada y sin limpieza
   flop_encl #(WIDTH) pcreg(
     .clk   (clk),
     .reset (reset),
@@ -70,10 +70,10 @@ module datapath(input         clk, reset,
     .q     (PC)
   );
 
-  // PC+4 adder
+  // sumador pc+4
   adder pcadd4(.a(PC), .b(32'd4), .y(PCPlus4F));
 
-  // IF/ID pipeline register  (Instr=32, PC=32, PCPlus4=32 → 96 bits)
+  // registro de pipeline if/id (instr=32, pc=32, pcplus4=32 → 96 bits)
   flop_encl #(96) IFID_reg(
     .clk   (clk),
     .reset (reset),
@@ -83,19 +83,19 @@ module datapath(input         clk, reset,
     .q     ({InstrD,  PCD,  PCPlus4D})
   );
 
-  // ─── DECODE STAGE ─────────────────────────────────────────────────────────
+  // etapa decode
 
-  // Instruction field decode
+  // decodificación de campos de la instrucción
   assign OpD       = InstrD[6:0];
   assign Funct3D   = InstrD[14:12];
   assign Funct7b5D = InstrD[30];
 
-  // Register address decode
+  // decodificación de direcciones de registros
   assign Rs1D = InstrD[19:15];
   assign Rs2D = InstrD[24:20];
   assign RdD  = InstrD[11:7];
 
-  // Register File  (write at posedge, read combinationally = 2nd half of cycle)
+  // archivo de registros (escritura en flanco de subida, lectura combinacional = segunda mitad del ciclo)
   regfile rf(
     .clk(clk),
     .we3(RegWriteW),
@@ -104,15 +104,15 @@ module datapath(input         clk, reset,
     .rd1(RD1),    .rd2(RD2)
   );
 
-  // Immediate extension
+  // extensión inmediata
   extend ext(
     .instr  (InstrD[31:7]),
     .immsrc (ImmSrcD),
     .immext (ImmExt)
   );
 
-  // ID/EX pipeline register
-  // d: Rs1D(5)+Rs2D(5)+RdD(5)+Funct3(3)+PCD(32)+PCPlus4D(32)+ImmExt(32)+RD1(32)+RD2(32) = 178 bits
+  // registro de pipeline id/ex
+  // d: rs1d(5)+rs2d(5)+rdd(5)+funct3(3)+pcd(32)+pcplus4d(32)+immext(32)+rd1(32)+rd2(32) = 178 bits
   flop_encl #(178) IDEX_data(
     .clk   (clk),
     .reset (reset),
@@ -124,39 +124,39 @@ module datapath(input         clk, reset,
              PCE,  PCPlus4E, ImmExtE, RD1E, RD2E})
   );
 
-  // ─── EXECUTE STAGE ────────────────────────────────────────────────────────
+  // etapa execute
 
-  // M-stage result mux for forwarding from MEM stage to EX stage
-  // ResultSrcM encoding:  00=ALU, 01=ReadData(lw), 10=PCPlus4(jal/jalr), 11=ImmExt(lui)
+  // multiplexor de forwarding de etapa M a E
+  // codificación de resultsrcm:  00=alu, 01=readdata(lw), 10=pcplus4(jal/jalr), 11=immext(lui)
   wire [31:0] ForwardDataM;
   mux4 #(WIDTH) fwdMmux(
     .d0(ALUResultM),
-    .d1(ALUResultM),   // 01 = lw: data not yet available, stall handles this; forwarded as ALU addr
-    .d2(PCPlus4M),     // 10 = jal/jalr return address
-    .d3(ImmExtM),      // 11 = lui immediate
+    .d1(ALUResultM),   // 01 = lw
+    .d2(PCPlus4M),     // 10 = dirección de retorno de jal/jalr
+    .d3(ImmExtM),      // 11 = inmediate de lui
     .s (ResultSrcM),
     .y (ForwardDataM)
   );
 
-  // Forwarding mux for SrcA
+  // multiplexor para forwarding de a
   mux3 #(WIDTH) fwdAmux(
-    .d0(RD1E),         // 00 = no forward
-    .d1(Result),       // 01 = forward from WB
-    .d2(ForwardDataM), // 10 = forward from MEM
+    .d0(RD1E),         // 00 = sin reenvío
+    .d1(Result),       // 01 = reenvío desde wb
+    .d2(ForwardDataM), // 10 = reenvío desde mem
     .s (ForwardAE),
     .y (SrcAE)
   );
 
-  // Forwarding mux for SrcB (also produces WriteDataE for stores)
+  // multiplexor para forwardinb de b
   mux3 #(WIDTH) fwdBmux(
-    .d0(RD2E),         // 00 = no forward
-    .d1(Result),       // 01 = forward from WB
-    .d2(ForwardDataM), // 10 = forward from MEM
+    .d0(RD2E),         // 00 = sin reenvío
+    .d1(Result),       // 01 = reenvío desde wb
+    .d2(ForwardDataM), // 10 = reenvío desde mem
     .s (ForwardBE),
     .y (WriteDataE)
   );
 
-  // Branch/JALR PC adder source mux: jalr uses rs1, branches use PC
+  // multiplexor de origen del sumador pc para branch/jalr: jalr usa rs1, branches usan pc
   mux2 #(WIDTH) pcaddsource(
     .d0(PCE),
     .d1(SrcAE),
@@ -164,14 +164,13 @@ module datapath(input         clk, reset,
     .y (SrcPC)
   );
 
-  // Branch/Jump target adder
+  // sumador de destino de branch/jump
   adder pcaddbranch(
     .a(SrcPC),
     .b(ImmExtE),
     .y(PCTargetE)
   );
 
-  // ALU source B mux: register vs immediate
   mux2 #(WIDTH) srcbmux(
     .d0(WriteDataE),
     .d1(ImmExtE),
@@ -179,7 +178,7 @@ module datapath(input         clk, reset,
     .y (SrcBE)
   );
 
-  // ALU
+  // alu
   alu alu(
     .a         (SrcAE),
     .b         (SrcBE),
@@ -190,7 +189,7 @@ module datapath(input         clk, reset,
     .v         (OverflowE)
   );
 
-  // Branch condition evaluation
+  // evaluación de condición de branch
   reg ValidBranch;
   always @* case(Funct3E)
     3'b000 : ValidBranch = BranchE &  ZeroE;                      // beq
@@ -202,15 +201,15 @@ module datapath(input         clk, reset,
 
   assign PCSrcE = ValidBranch | JumpE;
 
-  // Next PC mux: PCPlus4F (sequential) or branch/jump target
+  // multiplexor de PCNext
   mux2 #(WIDTH) pcmux(
     .d0(PCPlus4F),
-    .d1({PCTargetE[31:1], 1'b0}),  // force LSB=0 per RISC-V spec
+    .d1({PCTargetE[31:1], 1'b0}),  
     .s (PCSrcE),
     .y (PCNext)
   );
 
-  // ─── EXECUTE/MEM PIPELINE REGISTERS ───────────────────────────────────────
+  // registros de pipeline execute/mem
 
   flopr #(32) EXMEM_aluResult(
     .clk  (clk), .reset(reset),
@@ -242,7 +241,7 @@ module datapath(input         clk, reset,
     .q    (RdM)
   );
 
-  // ─── MEM/WB PIPELINE REGISTERS ────────────────────────────────────────────
+  // registros de pipeline mem/wb
 
   flopr #(32) MEMWB_aluResult(
     .clk  (clk), .reset(reset),
@@ -274,9 +273,9 @@ module datapath(input         clk, reset,
     .q    (RdW)
   );
 
-  // ─── WRITEBACK STAGE ──────────────────────────────────────────────────────
+  // etapa writeback
 
-  // Result mux: 00=ALU, 01=ReadData(lw), 10=PCPlus4(jal/jalr), 11=ImmExt(lui)
+  // multiplexor de resultado: 00=alu, 01=readdata(lw), 10=pcplus4(jal/jalr), 11=immext(lui)
   mux4 #(WIDTH) resultmux(
     .d0(ALUResultW),
     .d1(ReadDataW),

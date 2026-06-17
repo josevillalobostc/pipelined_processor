@@ -1,12 +1,12 @@
 module controller(input        clk, reset,
-                  input        FlushE,       // Pipeline clear signal from hazard unit
+                  input        FlushE,       // señal de limpieza del pipeline desde hazard
 
-                  // Decode stage inputs (from instruction in D stage)
+                  // entradas de la etapa de decodificación (etapa d)
                   input  [6:0] op,
                   input  [2:0] funct3,
                   input        funct7b5,
 
-                  // D-stage outputs (combinational from decoders)
+                  // salidas de la etapa d
                   output [1:0] ResultSrcD,
                   output       MemWriteD,
                   output       ALUSrcD,
@@ -15,7 +15,7 @@ module controller(input        clk, reset,
                   output [2:0] ImmSrcD,
                   output [3:0] ALUControlD,
 
-                  // E-stage outputs (pipeline registered)
+                  // salidas de la etapa e
                   output [1:0] ResultSrcE,
                   output       MemWriteE,
                   output       ALUSrcE,
@@ -23,18 +23,17 @@ module controller(input        clk, reset,
                   output       PCTargetSrcE,
                   output [3:0] ALUControlE,
 
-                  // M-stage outputs (pipeline registered)
+                  // salidas de la etapa m
                   output [1:0] ResultSrcM,
                   output       MemWriteM,
                   output       RegWriteM,
 
-                  // W-stage outputs (pipeline registered)
+                  // salidas de la etapa w
                   output [1:0] ResultSrcW,
                   output       RegWriteW);
 
   wire [1:0] ALUOp;
 
-  // D-stage decoders (combinational)
   maindec md(
     .op          (op),
     .ResultSrcD  (ResultSrcD),
@@ -56,9 +55,7 @@ module controller(input        clk, reset,
     .ALUControlD(ALUControlD)
   );
 
-  // ─── ID/EX pipeline register (control signals) ───────────────────────────
-  // Bits: RegWriteD(1)+ResultSrcD(2)+MemWriteD(1)+JumpD(1)+BranchD(1)+
-  //       ALUSrcD(1)+ALUControlD(4)+PCTargetSrcD(1) = 12 bits
+  // registro de pipeline id/ex
   wire [11:0] ctrlDE;
 
   flop_encl #(12) IDEX_ctrl(
@@ -74,8 +71,7 @@ module controller(input        clk, reset,
   assign {RegWriteE, ResultSrcE, MemWriteE, JumpE,
           BranchE,  ALUSrcE,    ALUControlE, PCTargetSrcE} = ctrlDE;
 
-  // ─── EX/MEM pipeline register (control signals) ──────────────────────────
-  // Bits: RegWriteE(1)+ResultSrcE(2)+MemWriteE(1) = 4 bits
+  // registro de pipeline ex/mem
   wire [3:0] ctrlEM;
 
   flopr #(4) EXMEM_ctrl(
@@ -87,8 +83,7 @@ module controller(input        clk, reset,
 
   assign {RegWriteM, ResultSrcM, MemWriteM} = ctrlEM;
 
-  // ─── MEM/WB pipeline register (control signals) ──────────────────────────
-  // Bits: RegWriteM(1)+ResultSrcM(2) = 3 bits
+  // registro de pipeline mem/wb
   wire [2:0] ctrlMW;
 
   flopr #(3) MEMWB_ctrl(

@@ -6,49 +6,46 @@ module riscvsingle(input         clk, reset,
                    output [31:0] WriteData,
                    input  [31:0] ReadData);
 
-  // Memory write
+  // escritura en memoria
   assign MemWrite = MemWriteM;
 
-  // D-stage instruction fields
+  // campos de instrucción de etapa d
   wire [6:0]  OpD;
   wire [2:0]  Funct3D;
   wire        Funct7b5D;
 
-  // D-stage control signals (only ImmSrcD goes to datapath directly)
+  // señales etapa d
   wire [2:0]  ImmSrcD;
 
-  // E-stage control signals
+  // señales de control de la etapa e
   wire        ALUSrcE, PCTargetSrcE, RegWriteE, JumpE, BranchE;
   wire [1:0]  ResultSrcE;
   wire [3:0]  ALUControlE;
 
-  // M-stage control signals
+  // señales de etapa m
   wire        RegWriteM, MemWriteM;
   wire [1:0]  ResultSrcM;
 
-  // W-stage control signals
+  // señales de etapa w
   wire        RegWriteW;
   wire [1:0]  ResultSrcW;
 
-  // Hazard Unit state signals
+  // señales de hazard
   wire [4:0]  Rs1D, Rs2D;
   wire [4:0]  Rs1E, Rs2E, RdE;
   wire [4:0]  RdM, RdW;
   wire        PCSrcE;
 
-  // Hazard Unit control signals
   wire        StallF, StallD, FlushD, FlushE;
   wire [1:0]  ForwardAE, ForwardBE;
 
-  // Memory data
   wire [31:0] ALUResultM;
   assign DataAdr = ALUResultM;
 
-  // ResultSrcEb0: bit 0 of ResultSrcE (indicates load in E stage)
   wire ResultSrcEb0;
   assign ResultSrcEb0 = ResultSrcE[0];
 
-  // Control Unit
+  // controller
   controller c(
     .clk         (clk),
     .reset       (reset),
@@ -80,7 +77,7 @@ module riscvsingle(input         clk, reset,
     .RegWriteW   (RegWriteW)
   );
 
-  // Datapath
+  // datapath
   datapath dp(
     .clk         (clk),
     .reset       (reset),
@@ -99,11 +96,9 @@ module riscvsingle(input         clk, reset,
     .FlushE      (FlushE),
     .ForwardAE   (ForwardAE),
     .ForwardBE   (ForwardBE),
-    // Instruction fields -> controller
     .OpD         (OpD),
     .Funct3D     (Funct3D),
     .Funct7b5D   (Funct7b5D),
-    // Hazard Unit state
     .Rs1D        (Rs1D),
     .Rs2D        (Rs2D),
     .Rs1E        (Rs1E),
@@ -112,7 +107,6 @@ module riscvsingle(input         clk, reset,
     .RdM         (RdM),
     .RdW         (RdW),
     .PCSrcE      (PCSrcE),
-    // Memory interface
     .PC          (PC),
     .Instr       (Instr),
     .ALUResultM  (ALUResultM),
@@ -120,7 +114,7 @@ module riscvsingle(input         clk, reset,
     .ReadDataM   (ReadData)
   );
 
-  // Hazard Unit
+  // hazard unit
   hazard_unit hu(
     .Rs1D        (Rs1D),
     .Rs2D        (Rs2D),

@@ -4,7 +4,6 @@ module top(input  clk, reset,
   
   wire [31:0] PC, Instr, ReadData; 
   
-  // Processor and memories
   riscvsingle rvsingle(
     .clk(clk), 
     .reset(reset), 
