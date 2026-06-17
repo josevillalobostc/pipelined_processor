@@ -18,7 +18,7 @@ module alu(input  [31:0] a, b,
 
   always @* case (alucontrol)
       4'b0000:  result_reg = sum; // add
-      4'b0001:  result_reg = sum; // subtract
+      4'b0001:  result_reg = sum; // sub
       4'b0010:  result_reg = a & b; // and
       4'b0011:  result_reg = a | b; // or
       4'b0100:  result_reg = a ^ b; // xor

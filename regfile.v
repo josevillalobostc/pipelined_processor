@@ -1,18 +1,19 @@
-module regfile(input  clk, 
-               input  we3, 
-               input  [4:0] a1, a2, a3, 
-               input  [31:0] wd3, 
-               output [31:0] rd1, rd2); 
+module regfile(input         clk,
+               input         we3,
+               input  [4:0]  a1, a2, a3,
+               input  [31:0] wd3,
+               output [31:0] rd1, rd2);
 
-  reg [31:0] rf[31:0]; 
+  reg [31:0] rf[31:0];
 
-  // write third port on rising edge of clock (A3/WD3/WE3)
-  always @(posedge clk) begin 
-    if (we3) rf[a3] <= wd3; 
+  // Write port: write on rising edge (first half of clock cycle)
+  always @(posedge clk) begin
+    if (we3) rf[a3] <= wd3;
   end
-  
-  // read two ports combinationally (A1/RD1, A2/RD2)
-  // register 0 hardwired to 0
-  assign rd1 = (a1 != 0) ? rf[a1] : 0; 
-  assign rd2 = (a2 != 0) ? rf[a2] : 0; 
+
+  // Read ports: combinational (second half of clock cycle)
+  // Internal bypass handles WB->D same-cycle hazard (write first half, read second half)
+  assign rd1 = (a1 != 5'b0) ? ((a1 == a3 && we3) ? wd3 : rf[a1]) : 32'b0;
+  assign rd2 = (a2 != 5'b0) ? ((a2 == a3 && we3) ? wd3 : rf[a2]) : 32'b0;
+
 endmodule

@@ -2,18 +2,18 @@ module aludec(input        opb5,
               input  [2:0] funct3,
               input        funct7b5,
               input  [1:0] ALUOp,
-              output [3:0] ALUControlD);   // señal de etapa D
+              output [3:0] ALUControlD);
 
   wire      RtypeSub;
   reg [3:0] ALUControl_reg;
 
-  assign RtypeSub   = funct7b5 & opb5;    // TRUE para R-type subtract
+  assign RtypeSub   = funct7b5 & opb5; // R-type subtract
   assign ALUControlD = ALUControl_reg;
 
   always @* case(ALUOp)
-      2'b00:   ALUControl_reg = 4'b0000; // addition (lw/sw)
-      2'b01:   ALUControl_reg = 4'b0001; // subtraction (branch)
-      default: case(funct3)              // R-type o I-type ALU
+      2'b00:   ALUControl_reg = 4'b0000; // add
+      2'b01:   ALUControl_reg = 4'b0001; // sub
+      default: case(funct3)              // R-type/I-type ALU
                  3'b000:  if (RtypeSub)
                             ALUControl_reg = 4'b0001; // sub
                           else

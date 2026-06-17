@@ -6,48 +6,49 @@ module riscvsingle(input         clk, reset,
                    output [31:0] WriteData,
                    input  [31:0] ReadData);
 
-  // DataAdr = ALUResultM (M-stage, sincronizado con MemWriteM) ✓
+  // Memory write
   assign MemWrite = MemWriteM;
 
-  // ---- Campos de InstrD (etapa D) → del datapath al controller ----
+  // D-stage instruction fields
   wire [6:0]  OpD;
   wire [2:0]  Funct3D;
   wire        Funct7b5D;
 
-  // ---- Control Unit: señales D ----
+  // D-stage control signals (only ImmSrcD goes to datapath directly)
   wire [2:0]  ImmSrcD;
 
-  // ---- Control Unit: señales E ----
+  // E-stage control signals
   wire        ALUSrcE, PCTargetSrcE, RegWriteE, JumpE, BranchE;
   wire [1:0]  ResultSrcE;
   wire [3:0]  ALUControlE;
 
-  // ---- Control Unit: señales M ----
+  // M-stage control signals
   wire        RegWriteM, MemWriteM;
   wire [1:0]  ResultSrcM;
 
-  // ---- Control Unit: señales W ----
+  // W-stage control signals
   wire        RegWriteW;
   wire [1:0]  ResultSrcW;
 
-  // ---- Hazard Unit: señales de estado ----
+  // Hazard Unit state signals
   wire [4:0]  Rs1D, Rs2D;
   wire [4:0]  Rs1E, Rs2E, RdE;
   wire [4:0]  RdM, RdW;
   wire        PCSrcE;
 
-  // ---- Hazard Unit: señales de control ----
+  // Hazard Unit control signals
   wire        StallF, StallD, FlushD, FlushE;
   wire [1:0]  ForwardAE, ForwardBE;
 
-  // ---- Datos de memoria ----
-  wire [31:0] ALUResultM;   // M-stage ALU result → DataAdr
+  // Memory data
+  wire [31:0] ALUResultM;
   assign DataAdr = ALUResultM;
 
-  // ================================================================
+  // ResultSrcEb0: bit 0 of ResultSrcE (indicates load in E stage)
+  wire ResultSrcEb0;
+  assign ResultSrcEb0 = ResultSrcE[0];
+
   // Control Unit
-  // Lee op/funct3/funct7b5 desde InstrD (etapa D) — correctamente staged
-  // ================================================================
   controller c(
     .clk         (clk),
     .reset       (reset),
@@ -79,9 +80,7 @@ module riscvsingle(input         clk, reset,
     .RegWriteW   (RegWriteW)
   );
 
-  // ================================================================
   // Datapath
-  // ================================================================
   datapath dp(
     .clk         (clk),
     .reset       (reset),
@@ -91,6 +90,7 @@ module riscvsingle(input         clk, reset,
     .BranchE     (BranchE),
     .JumpE       (JumpE),
     .ALUControlE (ALUControlE),
+    .ResultSrcM  (ResultSrcM),
     .RegWriteW   (RegWriteW),
     .ResultSrcW  (ResultSrcW),
     .StallF      (StallF),
@@ -99,11 +99,11 @@ module riscvsingle(input         clk, reset,
     .FlushE      (FlushE),
     .ForwardAE   (ForwardAE),
     .ForwardBE   (ForwardBE),
-    // Campos InstrD → controller
+    // Instruction fields -> controller
     .OpD         (OpD),
     .Funct3D     (Funct3D),
     .Funct7b5D   (Funct7b5D),
-    // Hazard Unit: estado
+    // Hazard Unit state
     .Rs1D        (Rs1D),
     .Rs2D        (Rs2D),
     .Rs1E        (Rs1E),
@@ -112,17 +112,15 @@ module riscvsingle(input         clk, reset,
     .RdM         (RdM),
     .RdW         (RdW),
     .PCSrcE      (PCSrcE),
-    // Memorias
+    // Memory interface
     .PC          (PC),
     .Instr       (Instr),
-    .ALUResultM  (ALUResultM),  // M-stage → DataAdr ✓
-    .WriteData   (WriteData),   // M-stage → dmem.wd ✓
-    .ReadData    (ReadData)
+    .ALUResultM  (ALUResultM),
+    .WriteDataM  (WriteData),
+    .ReadDataM   (ReadData)
   );
 
-  // ================================================================
   // Hazard Unit
-  // ================================================================
   hazard_unit hu(
     .Rs1D        (Rs1D),
     .Rs2D        (Rs2D),
@@ -133,7 +131,7 @@ module riscvsingle(input         clk, reset,
     .RdW         (RdW),
     .RegWriteM   (RegWriteM),
     .RegWriteW   (RegWriteW),
-    .ResultSrcEb0(ResultSrcE[0]),
+    .ResultSrcEb0(ResultSrcEb0),
     .PCSrcE      (PCSrcE),
     .StallF      (StallF),
     .StallD      (StallD),

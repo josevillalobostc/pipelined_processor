@@ -1,11 +1,12 @@
 module controller(input        clk, reset,
-                  input        FlushE,       // desde hazard_unit: limpia registro ID/EX
+                  input        FlushE,       // Pipeline clear signal from hazard unit
 
+                  // Decode stage inputs (from instruction in D stage)
                   input  [6:0] op,
                   input  [2:0] funct3,
                   input        funct7b5,
 
-                  // ---- Etapa D (Decode) — salen de maindec / aludec ----
+                  // D-stage outputs (combinational from decoders)
                   output [1:0] ResultSrcD,
                   output       MemWriteD,
                   output       ALUSrcD,
@@ -14,7 +15,7 @@ module controller(input        clk, reset,
                   output [2:0] ImmSrcD,
                   output [3:0] ALUControlD,
 
-                  // ---- Etapa E (Execute) — tras registro ID/EX ----
+                  // E-stage outputs (pipeline registered)
                   output [1:0] ResultSrcE,
                   output       MemWriteE,
                   output       ALUSrcE,
@@ -22,20 +23,18 @@ module controller(input        clk, reset,
                   output       PCTargetSrcE,
                   output [3:0] ALUControlE,
 
-                  // ---- Etapa M (Memory) — tras registro EX/MEM ----
+                  // M-stage outputs (pipeline registered)
                   output [1:0] ResultSrcM,
                   output       MemWriteM,
                   output       RegWriteM,
 
-                  // ---- Etapa W (Writeback) — tras registro MEM/WB ----
+                  // W-stage outputs (pipeline registered)
                   output [1:0] ResultSrcW,
                   output       RegWriteW);
 
   wire [1:0] ALUOp;
 
-  // ============================================================
-  // Etapa D: maindec + aludec
-  // ============================================================
+  // D-stage decoders (combinational)
   maindec md(
     .op          (op),
     .ResultSrcD  (ResultSrcD),
@@ -57,19 +56,15 @@ module controller(input        clk, reset,
     .ALUControlD(ALUControlD)
   );
 
-  // ============================================================
-  // Registro ID/EX de CONTROL — D → E
-  // enable_flipflop: FlushE lo limpia (inserta burbuja NOP en E)
-  // Bundle (12 bits):
-  //   RegWriteD(1)+ResultSrcD(2)+MemWriteD(1)+JumpD(1)
-  //   +BranchD(1)+ALUSrcD(1)+ALUControlD(4)+PCTargetSrcD(1)
-  // ============================================================
+  // ─── ID/EX pipeline register (control signals) ───────────────────────────
+  // Bits: RegWriteD(1)+ResultSrcD(2)+MemWriteD(1)+JumpD(1)+BranchD(1)+
+  //       ALUSrcD(1)+ALUControlD(4)+PCTargetSrcD(1) = 12 bits
   wire [11:0] ctrlDE;
 
-  enable_flipflop #(12) IDEX_ctrl(
+  flop_encl #(12) IDEX_ctrl(
     .clk   (clk),
     .reset (reset),
-    .enable(1'b1),    // siempre captura de D, a menos que FlushE lo limpie
+    .enable(1'b1),
     .clear (FlushE),
     .d     ({RegWriteD, ResultSrcD, MemWriteD, JumpD,
              BranchD,  ALUSrcD,    ALUControlD, PCTargetSrcD}),
@@ -79,10 +74,8 @@ module controller(input        clk, reset,
   assign {RegWriteE, ResultSrcE, MemWriteE, JumpE,
           BranchE,  ALUSrcE,    ALUControlE, PCTargetSrcE} = ctrlDE;
 
-  // ============================================================
-  // Registro EX/MEM de CONTROL — E → M
-  // Bundle (4 bits): RegWriteE(1)+ResultSrcE(2)+MemWriteE(1)
-  // ============================================================
+  // ─── EX/MEM pipeline register (control signals) ──────────────────────────
+  // Bits: RegWriteE(1)+ResultSrcE(2)+MemWriteE(1) = 4 bits
   wire [3:0] ctrlEM;
 
   flopr #(4) EXMEM_ctrl(
@@ -94,10 +87,8 @@ module controller(input        clk, reset,
 
   assign {RegWriteM, ResultSrcM, MemWriteM} = ctrlEM;
 
-  // ============================================================
-  // Registro MEM/WB de CONTROL — M → W
-  // Bundle (3 bits): RegWriteM(1)+ResultSrcM(2)
-  // ============================================================
+  // ─── MEM/WB pipeline register (control signals) ──────────────────────────
+  // Bits: RegWriteM(1)+ResultSrcM(2) = 3 bits
   wire [2:0] ctrlMW;
 
   flopr #(3) MEMWB_ctrl(

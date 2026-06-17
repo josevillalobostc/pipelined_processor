@@ -1,119 +1,67 @@
 module datapath(input         clk, reset,
 
-                // -- Etapa D: ImmSrc para Extend --
+                // D-stage
                 input  [2:0]  ImmSrcD,
 
-                // -- Etapa E: señales de control --
+                // E-stage control signals
                 input         ALUSrcE, PCTargetSrcE, BranchE, JumpE,
                 input  [3:0]  ALUControlE,
 
-                // -- Etapa W: señales de control --
+                // M/W-stage control signals
+                input  [1:0]  ResultSrcM,
                 input         RegWriteW,
                 input  [1:0]  ResultSrcW,
 
-                // -- Hazard Unit: entradas de control --
+                // Hazard Unit control signals
                 input         StallF, StallD, FlushD, FlushE,
                 input  [1:0]  ForwardAE, ForwardBE,
 
-                // -- Hacia el Controller: campos de InstrD --
+                // Controller inputs (decoded from instruction in D stage)
                 output [6:0]  OpD,
                 output [2:0]  Funct3D,
                 output        Funct7b5D,
 
-                // -- Hacia Hazard Unit: registros fuente/destino --
+                // Hazard Unit state signals
                 output [4:0]  Rs1D, Rs2D,
                 output [4:0]  Rs1E, Rs2E, RdE,
                 output [4:0]  RdM, RdW,
                 output        PCSrcE,
 
-                // -- Interfaz con memorias --
+                // Memory interface
                 output [31:0] PC,
-                input  [31:0] Instr,         // instrucción de imem (etapa F)
-                output [31:0] ALUResultM,    // dirección de memoria (etapa M)
-                output [31:0] WriteData,     // dato a escribir en memoria (etapa M)
-                input  [31:0] ReadData);
+                input  [31:0] Instr,        // F-stage instruction
+                output [31:0] ALUResultM, WriteDataM,
+                input  [31:0] ReadDataM);
 
   localparam WIDTH = 32;
 
-  // ==============================================================
-  // Wires internos
-  // ==============================================================
-
-  // IF / F stage
-  wire [31:0] PCNext, PCPlus4, PCTarget;
-
-  // IF/ID outputs (etapa D)
+  // Internal wires
+  wire [31:0] PCNext, PCPlus4F;
   wire [31:0] InstrD, PCD, PCPlus4D;
-
-  // D stage computation
-  wire [31:0] ImmExt;           // inmediato extendido (D stage)
-  wire [31:0] RD1, RD2;         // salidas crudas del regfile (D stage)
-
-  // ID/EX data outputs (etapa E)
+  wire [31:0] ImmExt;
+  wire [31:0] RD1, RD2;
+  wire [31:0] SrcAE;
+  wire [31:0] SrcBE, SrcPC;
+  wire [31:0] Result;
+  wire [31:0] RD1E, RD2E, PCE, ImmExtE, PCPlus4E;
   wire [2:0]  Funct3E;
-  wire [31:0] PCE, PCPlus4E, ImmExtE;
-  wire [31:0] RD1E, RD2E;       // SrcA y WriteData originales (antes de forwarding)
+  wire [31:0] PCTargetE;
+  wire [31:0] WriteDataE;
+  wire [31:0] PCPlus4M;
+  wire [31:0] ImmExtM;
+  wire [31:0] PCPlus4W;
+  wire [31:0] ALUResultW;
+  wire [31:0] ReadDataW;
+  wire [31:0] ImmExtW;
+  wire [31:0] ALUResult;
+  wire [4:0]  RdD;
 
-  // E stage computation
-  wire [31:0] SrcAFwd;          // SrcA tras forwarding → ALU.a y jalr
-  wire [31:0] WriteDataFwdE;    // WriteData tras forwarding (antes de EX/MEM register)
-  wire [31:0] SrcB, SrcPC;
-  wire [31:0] ALUResult;        // E-stage ALU result (interno; NO es puerto)
-  wire         Zero, Negative, Overflow;
+  wire        ZeroE, NegativeE, OverflowE;
 
-  // EX/MEM data outputs (etapa M)
-  // ALUResultM : puerto de salida (DataAdr)
-  // WriteData  : puerto de salida (dmem.wd)
-  wire [31:0] PCPlus4M, ImmExtM;
+  // ─── FETCH STAGE ──────────────────────────────────────────────────────────
 
-  // MEM/WB data outputs (etapa W)
-  wire [31:0] ALUResultW, ReadDataW, PCPlus4W, ImmExtW;
-
-  wire [31:0] Result;            // salida del result mux → regfile.wd3
-
-  // ==============================================================
-  // Registro IF/ID — 96 bits
-  // d = {Instr(32), PC(32), PCPlus4(32)}
-  // q = {InstrD,    PCD,    PCPlus4D  }
-  // enable = ~StallD  → congela cuando hay load-use stall
-  // clear  = FlushD   → limpia al tomar un branch/jump
-  // ==============================================================
-  enable_flipflop #(96) IFID_reg(
-    .clk   (clk),
-    .reset (reset),
-    .enable(~StallD),
-    .clear (FlushD),
-    .d     ({Instr,  PC,  PCPlus4}),
-    .q     ({InstrD, PCD, PCPlus4D})
-  );
-
-  // Campos de InstrD → al controller y a la hazard unit
-  assign OpD       = InstrD[6:0];
-  assign Funct3D   = InstrD[14:12];
-  assign Funct7b5D = InstrD[30];
-  assign Rs1D      = InstrD[19:15];
-  assign Rs2D      = InstrD[24:20];
-
-  // ==============================================================
-  // PCSrcE — lógica branch/jump en etapa E
-  // Usa Funct3E (correctamente en etapa E via ID/EX register)
-  // ==============================================================
-  reg ValidBranch;
-
-  always @* case(Funct3E)
-    3'b000 : ValidBranch = BranchE &  Zero;                   // beq
-    3'b001 : ValidBranch = BranchE & ~Zero;                   // bne
-    3'b100 : ValidBranch = BranchE &  (Negative ^ Overflow);  // blt (signed)
-    3'b101 : ValidBranch = BranchE & ~(Negative ^ Overflow);  // bge (signed)
-    default: ValidBranch = 1'b0;
-  endcase
-
-  assign PCSrcE = ValidBranch | JumpE;
-
-  // ==============================================================
-  // PC (etapa F) — enable_flipflop: StallF congela el PC
-  // ==============================================================
-  enable_flipflop #(WIDTH) pcreg(
+  // PC register with stall enable and no clear
+  flop_encl #(WIDTH) pcreg(
     .clk   (clk),
     .reset (reset),
     .enable(~StallF),
@@ -122,145 +70,213 @@ module datapath(input         clk, reset,
     .q     (PC)
   );
 
-  adder pcadd4(.a(PC), .b(32'd4), .y(PCPlus4));
+  // PC+4 adder
+  adder pcadd4(.a(PC), .b(32'd4), .y(PCPlus4F));
 
-  // Mux base de PCTarget:
-  //   PCTargetSrcE=0 → PCE + ImmExtE  (jal, branches — usando PC de la instrucción en E)
-  //   PCTargetSrcE=1 → SrcAFwd + ImmExtE (jalr)
-  mux2 pcaddsource(
-    .d0(PCE),       // jal/branch: base = PCE (PC de la instrucción en etapa E) ✓
-    .d1(SrcAFwd),   // jalr:       base = rs1 forwardeado
-    .s (PCTargetSrcE),
-    .y (SrcPC)
+  // IF/ID pipeline register  (Instr=32, PC=32, PCPlus4=32 → 96 bits)
+  flop_encl #(96) IFID_reg(
+    .clk   (clk),
+    .reset (reset),
+    .enable(~StallD),
+    .clear (FlushD),
+    .d     ({Instr,   PC,   PCPlus4F}),
+    .q     ({InstrD,  PCD,  PCPlus4D})
   );
 
-  adder pcaddbranch(
-    .a(SrcPC),
-    .b(ImmExtE),    // inmediato de etapa E (correctamente pipelineado) ✓
-    .y(PCTarget)
-  );
+  // ─── DECODE STAGE ─────────────────────────────────────────────────────────
 
-  mux2 #(WIDTH) pcmux(
-    .d0(PCPlus4),
-    .d1({PCTarget[31:1], 1'b0}),
-    .s (PCSrcE),
-    .y (PCNext)
-  );
+  // Instruction field decode
+  assign OpD       = InstrD[6:0];
+  assign Funct3D   = InstrD[14:12];
+  assign Funct7b5D = InstrD[30];
 
-  // ==============================================================
-  // Register File
-  //   Lecturas: en etapa D con InstrD (rs1, rs2)
-  //   Escritura: en etapa W con RdW y RegWriteW
-  //   a3=RdW sincronizado con RegWriteW (ambos 3 ciclos de retraso desde D)
-  // ==============================================================
+  // Register address decode
+  assign Rs1D = InstrD[19:15];
+  assign Rs2D = InstrD[24:20];
+  assign RdD  = InstrD[11:7];
+
+  // Register File  (write at posedge, read combinationally = 2nd half of cycle)
   regfile rf(
     .clk(clk),
     .we3(RegWriteW),
-    .a1 (InstrD[19:15]),  .a2(InstrD[24:20]),  .a3(RdW),
+    .a1 (Rs1D),   .a2(Rs2D),   .a3(RdW),
     .wd3(Result),
-    .rd1(RD1),            .rd2(RD2)
+    .rd1(RD1),    .rd2(RD2)
   );
 
+  // Immediate extension
   extend ext(
     .instr  (InstrD[31:7]),
     .immsrc (ImmSrcD),
     .immext (ImmExt)
   );
 
-  // ==============================================================
-  // Registro ID/EX de DATOS — 178 bits
-  // Rs1(5)+Rs2(5)+Rd(5)+Funct3(3)+PC(32)+PCPlus4(32)+ImmExt(32)+RD1(32)+RD2(32)
-  // clear = FlushE: inserta burbuja (ceros → Rd=0 evita escrituras espurias)
-  // ==============================================================
-  enable_flipflop #(178) IDEX_data(
+  // ID/EX pipeline register
+  // d: Rs1D(5)+Rs2D(5)+RdD(5)+Funct3(3)+PCD(32)+PCPlus4D(32)+ImmExt(32)+RD1(32)+RD2(32) = 178 bits
+  flop_encl #(178) IDEX_data(
     .clk   (clk),
     .reset (reset),
     .enable(1'b1),
     .clear (FlushE),
-    .d     ({InstrD[19:15], InstrD[24:20], InstrD[11:7], InstrD[14:12],
-             PCD, PCPlus4D, ImmExt, RD1, RD2}),
+    .d     ({Rs1D, Rs2D, RdD, InstrD[14:12],
+             PCD,  PCPlus4D, ImmExt, RD1, RD2}),
     .q     ({Rs1E, Rs2E, RdE, Funct3E,
              PCE,  PCPlus4E, ImmExtE, RD1E, RD2E})
   );
 
-  // ==============================================================
-  // Forwarding muxes — etapa E
-  //   d0 = valor original de E stage (RD1E/RD2E — regfile leído en D, registrado a E)
-  //   d1 = ResultW  (etapa W, 2 ciclos atrás)
-  //   d2 = ALUResultM (etapa M, 1 ciclo atrás)
-  // ==============================================================
+  // ─── EXECUTE STAGE ────────────────────────────────────────────────────────
+
+  // M-stage result mux for forwarding from MEM stage to EX stage
+  // ResultSrcM encoding:  00=ALU, 01=ReadData(lw), 10=PCPlus4(jal/jalr), 11=ImmExt(lui)
+  wire [31:0] ForwardDataM;
+  mux4 #(WIDTH) fwdMmux(
+    .d0(ALUResultM),
+    .d1(ALUResultM),   // 01 = lw: data not yet available, stall handles this; forwarded as ALU addr
+    .d2(PCPlus4M),     // 10 = jal/jalr return address
+    .d3(ImmExtM),      // 11 = lui immediate
+    .s (ResultSrcM),
+    .y (ForwardDataM)
+  );
+
+  // Forwarding mux for SrcA
   mux3 #(WIDTH) fwdAmux(
-    .d0(RD1E),        // sin forwarding
-    .d1(Result),      // forward desde W
-    .d2(ALUResultM),  // forward desde M
+    .d0(RD1E),         // 00 = no forward
+    .d1(Result),       // 01 = forward from WB
+    .d2(ForwardDataM), // 10 = forward from MEM
     .s (ForwardAE),
-    .y (SrcAFwd)
+    .y (SrcAE)
   );
 
+  // Forwarding mux for SrcB (also produces WriteDataE for stores)
   mux3 #(WIDTH) fwdBmux(
-    .d0(RD2E),        // sin forwarding
-    .d1(Result),      // forward desde W
-    .d2(ALUResultM),  // forward desde M
+    .d0(RD2E),         // 00 = no forward
+    .d1(Result),       // 01 = forward from WB
+    .d2(ForwardDataM), // 10 = forward from MEM
     .s (ForwardBE),
-    .y (WriteDataFwdE)
+    .y (WriteDataE)
   );
 
-  // ==============================================================
-  // ALU — etapa E
-  // ==============================================================
+  // Branch/JALR PC adder source mux: jalr uses rs1, branches use PC
+  mux2 #(WIDTH) pcaddsource(
+    .d0(PCE),
+    .d1(SrcAE),
+    .s (PCTargetSrcE),
+    .y (SrcPC)
+  );
+
+  // Branch/Jump target adder
+  adder pcaddbranch(
+    .a(SrcPC),
+    .b(ImmExtE),
+    .y(PCTargetE)
+  );
+
+  // ALU source B mux: register vs immediate
   mux2 #(WIDTH) srcbmux(
-    .d0(WriteDataFwdE),
-    .d1(ImmExtE),     // inmediato de etapa E (correctamente pipelineado) ✓
+    .d0(WriteDataE),
+    .d1(ImmExtE),
     .s (ALUSrcE),
-    .y (SrcB)
+    .y (SrcBE)
   );
 
+  // ALU
   alu alu(
-    .a         (SrcAFwd),
-    .b         (SrcB),
+    .a         (SrcAE),
+    .b         (SrcBE),
     .alucontrol(ALUControlE),
     .result    (ALUResult),
-    .zero      (Zero),
-    .neg       (Negative),
-    .v         (Overflow)
+    .zero      (ZeroE),
+    .neg       (NegativeE),
+    .v         (OverflowE)
   );
 
-  // ==============================================================
-  // Registros EX/MEM de DATOS
-  //   ALUResult     → ALUResultM  : dirección de memoria + forwarding desde M
-  //   WriteDataFwdE → WriteData   : dato a escribir en memoria (puerto de salida)
-  //   PCPlus4E      → PCPlus4M   : cadena hacia PCPlus4W
-  //   ImmExtE       → ImmExtM    : cadena hacia ImmExtW
-  //   RdE           → RdM        : detección de hazards
-  // ==============================================================
-  flopr #(32) EXMEM_aluResult(.clk(clk), .reset(reset), .d(ALUResult),      .q(ALUResultM));
-  flopr #(32) EXMEM_wdata    (.clk(clk), .reset(reset), .d(WriteDataFwdE),  .q(WriteData));
-  flopr #(32) EXMEM_pcplus4  (.clk(clk), .reset(reset), .d(PCPlus4E),       .q(PCPlus4M));
-  flopr #(32) EXMEM_immext   (.clk(clk), .reset(reset), .d(ImmExtE),        .q(ImmExtM));
-  flopr #(5)  EXMEM_rd       (.clk(clk), .reset(reset), .d(RdE),            .q(RdM));
+  // Branch condition evaluation
+  reg ValidBranch;
+  always @* case(Funct3E)
+    3'b000 : ValidBranch = BranchE &  ZeroE;                      // beq
+    3'b001 : ValidBranch = BranchE & ~ZeroE;                      // bne
+    3'b100 : ValidBranch = BranchE &  (NegativeE ^ OverflowE);    // blt
+    3'b101 : ValidBranch = BranchE & ~(NegativeE ^ OverflowE);    // bge
+    default: ValidBranch = 1'b0;
+  endcase
 
-  // ==============================================================
-  // Registros MEM/WB de DATOS
-  //   ALUResultM → ALUResultW : resultado ALU en etapa W (para result mux)
-  //   ReadData   → ReadDataW  : dato leído de memoria en etapa W
-  //   PCPlus4M   → PCPlus4W  : PC+4 en etapa W (return address jal/jalr)
-  //   ImmExtM    → ImmExtW   : inmediato en etapa W (para lui)
-  //   RdM        → RdW       : registro destino en etapa W
-  // ==============================================================
-  flopr #(32) MEMWB_aluResult(.clk(clk), .reset(reset), .d(ALUResultM),  .q(ALUResultW));
-  flopr #(32) MEMWB_readdata (.clk(clk), .reset(reset), .d(ReadData),    .q(ReadDataW));
-  flopr #(32) MEMWB_pcplus4  (.clk(clk), .reset(reset), .d(PCPlus4M),   .q(PCPlus4W));
-  flopr #(32) MEMWB_immext   (.clk(clk), .reset(reset), .d(ImmExtM),    .q(ImmExtW));
-  flopr #(5)  MEMWB_rd       (.clk(clk), .reset(reset), .d(RdM),         .q(RdW));
+  assign PCSrcE = ValidBranch | JumpE;
 
-  // ==============================================================
-  // Result mux — etapa W
-  // Todos los valores están correctamente en etapa W:
-  //   d0 = ALUResultW : R/I-type ALU results
-  //   d1 = ReadDataW  : lw (load word)
-  //   d2 = PCPlus4W   : jal/jalr (return address = PC+4 de la instrucción)
-  //   d3 = ImmExtW    : lui
-  // ==============================================================
+  // Next PC mux: PCPlus4F (sequential) or branch/jump target
+  mux2 #(WIDTH) pcmux(
+    .d0(PCPlus4F),
+    .d1({PCTargetE[31:1], 1'b0}),  // force LSB=0 per RISC-V spec
+    .s (PCSrcE),
+    .y (PCNext)
+  );
+
+  // ─── EXECUTE/MEM PIPELINE REGISTERS ───────────────────────────────────────
+
+  flopr #(32) EXMEM_aluResult(
+    .clk  (clk), .reset(reset),
+    .d    (ALUResult),
+    .q    (ALUResultM)
+  );
+
+  flopr #(32) EXMEM_wdata(
+    .clk  (clk), .reset(reset),
+    .d    (WriteDataE),
+    .q    (WriteDataM)
+  );
+
+  flopr #(32) EXMEM_pcPlus4(
+    .clk  (clk), .reset(reset),
+    .d    (PCPlus4E),
+    .q    (PCPlus4M)
+  );
+
+  flopr #(32) EXMEM_immExt(
+    .clk  (clk), .reset(reset),
+    .d    (ImmExtE),
+    .q    (ImmExtM)
+  );
+
+  flopr #(5) EXMEM_rd(
+    .clk  (clk), .reset(reset),
+    .d    (RdE),
+    .q    (RdM)
+  );
+
+  // ─── MEM/WB PIPELINE REGISTERS ────────────────────────────────────────────
+
+  flopr #(32) MEMWB_aluResult(
+    .clk  (clk), .reset(reset),
+    .d    (ALUResultM),
+    .q    (ALUResultW)
+  );
+
+  flopr #(32) MEMWB_readData(
+    .clk  (clk), .reset(reset),
+    .d    (ReadDataM),
+    .q    (ReadDataW)
+  );
+
+  flopr #(32) MEMWB_pcPlus4(
+    .clk  (clk), .reset(reset),
+    .d    (PCPlus4M),
+    .q    (PCPlus4W)
+  );
+
+  flopr #(32) MEMWB_immExt(
+    .clk  (clk), .reset(reset),
+    .d    (ImmExtM),
+    .q    (ImmExtW)
+  );
+
+  flopr #(5) MEMWB_rd(
+    .clk  (clk), .reset(reset),
+    .d    (RdM),
+    .q    (RdW)
+  );
+
+  // ─── WRITEBACK STAGE ──────────────────────────────────────────────────────
+
+  // Result mux: 00=ALU, 01=ReadData(lw), 10=PCPlus4(jal/jalr), 11=ImmExt(lui)
   mux4 #(WIDTH) resultmux(
     .d0(ALUResultW),
     .d1(ReadDataW),
