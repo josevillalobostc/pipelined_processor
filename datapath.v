@@ -70,8 +70,40 @@ module datapath(input         clk, reset,
     .q     (PC)
   );
 
-  // sumador pc+4
-  adder pcadd4(.a(PC), .b(32'd4), .y(PCPlus4F));
+  wire Compressed;
+  wire [15:0] c_instr;
+  wire [31:0] decoded_instruction;
+
+
+  assign c_instr = Instr[15:0];
+
+  assign Compressed = c_instr[1:0] != 2'b11;
+
+  wire [31:0] c_decoded_instr;
+
+  c_decoder cdecod(
+    .c_instr(c_instr),
+    .instr_32(c_decoded_instr)
+  );
+
+  mux2 #(WIDTH) instrType(
+    .d0(Instr),
+    .d1(c_decoded_instr),
+    .s(Compressed),
+    .y(decoded_instruction)
+  );
+
+  wire [31:0] PCIncrement;
+
+  mux2 #(WIDTH) pcadvancer(
+    .d0(32'd4),
+    .d1(32'd2),
+    .s(Compressed),
+    .y(PCIncrement)
+  );
+
+  // sumador pc
+  adder pcadd4(.a(PC), .b(PCIncrement), .y(PCPlus4F));
 
   // registro de pipeline if/id (instr=32, pc=32, pcplus4=32 → 96 bits)
   flop_encl #(96) IFID_reg(
@@ -79,7 +111,7 @@ module datapath(input         clk, reset,
     .reset (reset),
     .enable(~StallD),
     .clear (FlushD),
-    .d     ({Instr,   PC,   PCPlus4F}),
+    .d     ({decoded_instruction,   PC,   PCPlus4F}),
     .q     ({InstrD,  PCD,  PCPlus4D})
   );
 
