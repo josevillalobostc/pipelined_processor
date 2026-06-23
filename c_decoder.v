@@ -14,6 +14,7 @@ module c_decoder(
 
 
     always @(*) begin
+        instr_32 = {16'b0, c_instr};
         case (c_instr[1:0])
             2'b00: begin
                 case (c_instr[15:13])
@@ -21,7 +22,7 @@ module c_decoder(
                     3'b010: instr_32 = { {5'b0, c_instr[5], c_instr[12:10], c_instr[6], 2'b00}, rs1_prime, 3'b010, rd_prime, 7'b0000011 };
                     
                     // c.sw -> sw rs2', imm(rs1')
-                    3'b110: instr_32 = { {5'b0, c_instr[5], c_instr[12:10]}, rs2_prime, rs1_prime, 3'b010, {c_instr[6], 2'b00}, 7'b0100011 };
+                    3'b110: instr_32 = { {5'b00000, c_instr[5], c_instr[12]}, rs2_prime, rs1_prime, 3'b010, {c_instr[11:10], c_instr[6], 2'b00}, 7'b0100011 };
                 endcase
             end
 
@@ -66,10 +67,10 @@ module c_decoder(
                     3'b101: instr_32 = { c_instr[12], c_instr[8], c_instr[10:9], c_instr[6], c_instr[7], c_instr[2], c_instr[11], c_instr[5:3], c_instr[12], {8{c_instr[12]}}, 5'd0, 7'b1101111 };
 
                     // c.beqz -> beq rs1', x0, offset
-                    3'b110: instr_32 = { {4{c_instr[12]}}, c_instr[9:8], c_instr[2], 5'b00000, rs1_prime, 3'b000, c_instr[11:10], c_instr[6:5], c_instr[12], 7'b1100011 };
-
+                    3'b110: instr_32 = { {4{c_instr[12]}}, c_instr[6:5], c_instr[2], 5'b00000, rs1_prime, 3'b000, c_instr[11:10], c_instr[4:3], c_instr[12], 7'b1100011 };
+                    
                     // c.bnez -> bne rs1', x0, offset
-                    3'b111: instr_32 = { {4{c_instr[12]}}, c_instr[9:8], c_instr[2], 5'b00000, rs1_prime, 3'b001, c_instr[11:10], c_instr[6:5], c_instr[12], 7'b1100011 };
+                    3'b111: instr_32 = { {4{c_instr[12]}}, c_instr[6:5], c_instr[2], 5'b00000, rs1_prime, 3'b001, c_instr[11:10], c_instr[4:3], c_instr[12], 7'b1100011 };
                 endcase
             end
 
@@ -79,7 +80,7 @@ module c_decoder(
                     3'b000: instr_32 = { 6'b000000, c_instr[12], c_instr[6:2], c_rd, 3'b001, c_rd, 7'b0010011 };
 
                     // c.lwsp -> lw rd, imm(x2)
-                    3'b010: instr_32 = { 4'b0000, c_instr[12:11], c_instr[2], c_instr[6:4], 2'b00, 5'd2, 3'b010, c_rd, 7'b0000011 };
+                    3'b010: instr_32 = { 4'b0000, c_instr[3:2], c_instr[12], c_instr[6:4], 2'b00, 5'd2, 3'b010, c_rd, 7'b0000011 };
 
                     3'b100: begin
                         if (c_instr[12] == 1'b0 && c_instr[6:2] == 5'b00000)
