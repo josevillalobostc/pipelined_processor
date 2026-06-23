@@ -1,5 +1,5 @@
 module c_decoder(
-    input  [16:0] c_instr,
+    input  [15:0] c_instr,
     output reg [31:0] instr_32
 );
 
