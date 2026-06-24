@@ -1,9 +1,5 @@
-06400113 // [31:0] addi x2, x0, 100
-00500413 // [31:0] addi x8, x0, 5
-00000493 // [31:0] addi x9, x0, 0
-94A2C401   // c.add x9, x8                    | c.beqz x8, +8 (sale del bucle)
-BFED147D   // c.j -6 (repite el bucle)        | c.addi x8, -1  <--- ¡AQUÍ ESTÁ LA MAGIA!
-051304A9   // addi x10, x0, 104 (mitad baja)  | c.addi x9, 10
-20230680   // sw x9, 0(x10) (mitad baja)      | addi x10, x0, 104 (mitad alta)
-A0010095   // c.j 0 (halt infinito)           | sw x9, 0(x10) (mitad alta)
-00000000   // NOP de relleno
+01000413 // addi x8, x0, 16
+00400493 // addi x9, x0, 4
+04069426   // c.slli x8, 1                    | c.add x8, x9
+006FC0C0   // j 0 (parte alta)                | c.sw x8, 4(x9)
+00000000 //   instrucción vacía (nop)         |  j 0 (parte baja)
