@@ -14,7 +14,6 @@ module c_decoder(
 
 
     always @(*) begin
-        instr_32 = {16'b0, c_instr};
         case (c_instr[1:0])
             2'b00: begin
                 case (c_instr[15:13])
@@ -29,7 +28,7 @@ module c_decoder(
             2'b01: begin
                 case (c_instr[15:13])
                     // c.addi -> addi rd, rd, imm
-                    3'b000: instr_32 = { {6{c_instr[12]}}, c_instr[12], c_instr[6:2], c_rs1, 3'b000, c_rd, 7'b0010011 };
+                    3'b000: instr_32 = { {6{c_instr[12]}}, c_instr[12], c_rs2, c_rs1, 3'b000, c_rd, 7'b0010011 };
 
                     // c.jal -> jal x1, offset  (Solo RV32C)
                     3'b001: instr_32 = { c_instr[12], c_instr[8], c_instr[10:9], c_instr[6], c_instr[7], c_instr[2], c_instr[11], c_instr[5:3], c_instr[12], {8{c_instr[12]}}, 5'd1, 7'b1101111 };
@@ -83,21 +82,22 @@ module c_decoder(
                     3'b010: instr_32 = { 4'b0000, c_instr[3:2], c_instr[12], c_instr[6:4], 2'b00, 5'd2, 3'b010, c_rd, 7'b0000011 };
 
                     3'b100: begin
-                        if (c_instr[12] == 1'b0 && c_instr[6:2] == 5'b00000)
+                        if (c_instr[12] == 1'b0 && c_rs2 == 5'b00000)
                             // c.jr -> jalr x0, rs1, 0
                             instr_32 = { 12'b0, c_rs1, 3'b000, 5'b00000, 7'b1100111 };
-                        else if (c_instr[12] == 1'b1 && c_instr[6:2] == 5'b00000)
+                        else if (c_instr[12] == 1'b1 && c_rs2 == 5'b00000)
                             // c.jalr -> jalr x1, rs1, 0
                             instr_32 = { 12'b0, c_rs1, 3'b000, 5'b00001, 7'b1100111 };
-                        else if (c_instr[12] == 1'b1 && c_instr[6:2] != 5'b00000)
+                        else if (c_instr[12] == 1'b1 && c_rs2 != 5'b00000)
                             // c.add -> add rd, rd, rs2
-                            instr_32 = { 7'b0000000, c_rs2, c_rd, 3'b000, c_rd, 7'b0110011 };
+                            instr_32 = { 7'b0000000, c_rs2, c_rs1, 3'b000, c_rd, 7'b0110011 };
                     end
 
                     // c.swsp -> sw rs2, imm(x2)
                     3'b110: instr_32 = { 4'b0000, c_instr[8:7], c_instr[12], c_rs2, 5'd2, 3'b010, c_instr[11:9], 2'b00, 7'b0100011 };
                 endcase
             end
+            default: instr_32 = {16'b0, c_instr};
         endcase
     end
 endmodule
